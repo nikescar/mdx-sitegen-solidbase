@@ -272,7 +272,7 @@ elif [ "$deployment_provider" == "cloudflare-pages" ]; then
     npm install wrangler --save-dev
   fi
   export CLOUDFLARE_API_TOKEN="$cloudflare_pages_token"
-  npx wrangler pages deploy ./.output/public --project-name "$cloudflare_project"
+  npx wrangler pages deploy ./.output/public --project-name "$cloudflare_project" --branch production
 else
   echo "Unknown deployment provider: $deployment_provider"
   exit 1
