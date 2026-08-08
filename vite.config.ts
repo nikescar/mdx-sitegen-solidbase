@@ -1,9 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parse } from "yaml";
-import { createWithSolidBase } from "@kobalte/solidbase/config";
+import { defineConfig } from "vite";
+import { solidStart } from "@solidjs/start/config";
+import { createSolidBase } from "@kobalte/solidbase/config";
 import defaultTheme from "@kobalte/solidbase/default-theme";
-import { defineConfig } from "@solidjs/start/config";
 import { vitePlugin as OGPlugin } from "@solid-mediakit/og/unplugin";
 
 type RouteMetadata = {
@@ -11,33 +12,53 @@ type RouteMetadata = {
 	description?: string,
 	order?: number,
 }
+
 type Route = {
 	slug: string,
 	metadata: RouteMetadata,
 }
-const parseMetadata = (path: string): RouteMetadata => {
-	const contents = fs.readFileSync(path).toString();
+
+const parseMetadata = (filePath: string): RouteMetadata => {
+	const contents = fs.readFileSync(filePath, "utf8");
 	const start = contents.indexOf("---");
 	const end = contents.lastIndexOf("---");
-	if (start == -1 || end == -1) return { title: path.split("\\")[-1] }
-	const yaml = contents.substring(start + 3, end)
-	const parsed = parse(yaml);
-	parsed.title ??= path.split("\\")[-1];
-	return parsed
+	const fallbackTitle = path.basename(filePath, path.extname(filePath));
+
+	if (start === -1 || end === -1 || end <= start) {
+		return { title: fallbackTitle };
+	}
+
+	const yaml = contents.substring(start + 3, end);
+	const parsed = parse(yaml) ?? {};
+
+	return {
+		...parsed,
+		title: parsed.title ?? fallbackTitle,
+	};
 }
+
 const getRoutes = (base: string, paths: string[]): Route[] => {
-	const routes = paths.filter(p => p.endsWith(".mdx")).map(p => ({ slug: p.replace(path.normalize(base), "").replaceAll("\\", "/").replace(".mdx", ""), metadata: parseMetadata(p) }));
-	return routes;
+	return paths
+		.filter((filePath) => filePath.endsWith(".mdx"))
+		.map((filePath) => ({
+			slug: filePath
+				.replace(path.normalize(base), "")
+				.replaceAll("\\", "/")
+				.replace(".mdx", ""),
+			metadata: parseMetadata(filePath),
+		}));
 }
 
 const getPathsSync = (base: string): string[] => {
 	const paths: string[] = [];
-	
+
 	const readDirRecursive = (dir: string) => {
 		try {
 			const files = fs.readdirSync(dir, { withFileTypes: true });
+
 			for (const file of files) {
 				const fullPath = path.join(dir, file.name);
+
 				if (file.isDirectory()) {
 					readDirRecursive(fullPath);
 				} else {
@@ -45,63 +66,53 @@ const getPathsSync = (base: string): string[] => {
 				}
 			}
 		} catch {
-			// Directory doesn't exist or no permissions
+			// Directory doesn't exist or no permissions.
 		}
 	};
-	
+
 	readDirRecursive(base);
 	return paths;
 }
 
-const routes = getRoutes("src/routes", getPathsSync("src/routes")).filter(x => x.slug !== "/index");
+const routes = getRoutes("src/routes", getPathsSync("src/routes")).filter((route) => route.slug !== "/index");
 
-// load _config.yaml into ymlconfigs variable
 const ymlconfigs: Record<string, any> = {};
 const configPath = path.join(process.cwd(), "_config.yml");
+
 if (fs.existsSync(configPath)) {
 	const configContent = fs.readFileSync(configPath, "utf8");
+
 	try {
-		const config = parse(configContent);
+		const config = parse(configContent) ?? {};
+
 		for (const key of Object.keys(config)) {
 			ymlconfigs[key] = config[key];
 		}
 	} catch (error) {
-		console.error("Failed to parse _config.yaml:", error);
+		console.error("Failed to parse _config.yml:", error);
 	}
 } else {
-	console.warn("_config.yaml not found, using default configuration.");
+	console.warn("_config.yml not found, using default configuration.");
 }
 
-let basePath = ymlconfigs.site_url ? new URL(ymlconfigs.site_url).pathname.replace(/\/$/, "") : "/";
-if (process.env.NODE_ENV === 'development') {
-	basePath = '/'
-}
+const configuredSiteUrl = ymlconfigs.site_url || "https://example.com/";
+const configuredBasePath = new URL(configuredSiteUrl).pathname.replace(/\/$/, "") || "/";
+const solidBase = createSolidBase(defaultTheme);
 
-export default defineConfig( // solidbase https://docs.solidjs.com/solid-start/reference/entrypoints/app-config
-	createWithSolidBase(defaultTheme)( // solid defineConfig docs.solidjs.com/solid-start/reference/config/define-config
-		{ // vinxi https://vinxi.vercel.app/api/app.html
+export default defineConfig(({ command }) => ({
+	base: command === "serve" ? "/" : configuredBasePath,
+	build: {
+		outDir: ".output/public",
+		emptyOutDir: true,
+	},
+	plugins: [
+		...solidStart(solidBase.startConfig({
 			ssr: false,
-			vite({ router }) { // vite https://vitejs.dev/config/
-				if (router === "server") {
-				} else if (router === "client") {
-					return {
-						base: basePath,
-						plugins: [OGPlugin() as any],
-					}
-				} else if (router === "server-function") {
-				}
-				return { plugins: [] };
-			},
-			server: { // nitro https://nitro.build/config
-				baseURL: basePath,
-				compatibilityDate: "2025-05-26",
-				preset: "github_pages",
-				// legacyExternals: true,
-			},
-		},
-		{
+		})),
+		solidBase.plugin({
 			title: ymlconfigs.title || "Github Action Solidbase Builder",
 			description: ymlconfigs.description || "Solidbase Theme for markdown documents to site converter for GitHub Pages.",
+			siteUrl: configuredSiteUrl,
 			issueAutolink: ymlconfigs.issue_link || "https://github.com/nikescar/mdx-sitegen-solidbase/issues",
 			editPath: ymlconfigs.edit_path || "https://github.com/nikescar/mdx-sitegen-solidbase/edit/main/:path",
 			lang: ymlconfigs.lang || "en",
@@ -115,61 +126,58 @@ export default defineConfig( // solidbase https://docs.solidjs.com/solid-start/r
 				},
 				nav: [
 					...Object.entries(ymlconfigs.theme_config?.nav || {}).map(([text, link]) => ({
-						text: text,
+						text,
 						link: link as string,
 					})),
 				],
 				sidebar: {
 					...(ymlconfigs.theme_config?.sidebar?.reduce((acc: any, sidebarItem: any) => {
-						// Handle the sidebar structure from YAML (3-level structure)
 						const [title, sections] = Object.entries(sidebarItem)[0] as [string, any];
 						const sidebarSlug = `/${title.toLowerCase()}`;
-						
+
 						let items: any[] = [];
-						
+
 						if (Array.isArray(sections)) {
-							// Handle 3-level structure: Docs -> [array of sections] -> items
 							sections.forEach((section: any) => {
 								const [sectionTitle, sectionItems] = Object.entries(section)[0] as [string, any];
-								
-								if (typeof sectionItems === 'object' && sectionItems !== null) {
-									// Create a group/section with its items
+
+								if (typeof sectionItems === "object" && sectionItems !== null) {
 									items.push({
 										title: sectionTitle,
 										items: Object.entries(sectionItems).map(([itemTitle, itemSlug]) => ({
 											title: itemTitle,
 											link: itemSlug as string,
-										}))
+										})),
 									});
 								}
 							});
-						} else if (typeof sections === 'object' && sections !== null) {
-							// Handle case where sections is an object (like your current YAML structure)
+						} else if (typeof sections === "object" && sections !== null) {
 							Object.entries(sections).forEach(([sectionTitle, sectionItems]) => {
-								if (typeof sectionItems === 'object' && sectionItems !== null) {
-									// Create a group/section with its items
+								if (typeof sectionItems === "object" && sectionItems !== null) {
 									items.push({
 										title: sectionTitle,
 										items: Object.entries(sectionItems).map(([itemTitle, itemSlug]) => ({
 											title: itemTitle,
 											link: itemSlug as string,
-										}))
+										})),
 									});
 								}
 							});
 						} else {
-							// Fallback to route-based items
-							items = routes.filter(route => route.slug.startsWith(sidebarSlug)).map(route => ({
-								title: route.metadata.title,
-								link: route.slug,
-							}));
+							items = routes
+								.filter((route) => route.slug.startsWith(sidebarSlug))
+								.map((route) => ({
+									title: route.metadata.title,
+									link: route.slug,
+								}));
 						}
-						
+
 						acc[sidebarSlug] = items;
 						return acc;
 					}, {}) || {}),
 				},
 			},
-		},
-	),
-);
+		}),
+		OGPlugin() as any,
+	],
+}));

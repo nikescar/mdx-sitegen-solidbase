@@ -96,7 +96,7 @@ if [ -n "$site_url" ]; then
 fi
 
 # 3. Building the project...
-npx vinxi build
+npx vite build
 
 favicon_path=$(${yq_bin_path} eval '.site_favicon' _config.yml)
 if [ -n "$favicon_path" ]; then
