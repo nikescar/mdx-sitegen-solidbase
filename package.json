@@ -8,7 +8,7 @@
     "build": "vite build",
     "build:vinxi": "vite build",
     "start": "vite preview",
-    "clean": "rm -rf .vinxi .output assets index.html* 404.html* _site .solidbase app.config.timestamp* src/routes/*",
+    "clean": "rm -rf .vinxi .output dist assets index.html* 404.html* _site .solidbase app.config.timestamp* src/routes/*",
     "version": "vite --version",
     "validate:yaml": "node scripts/validate-yaml.js",
     "validate": "npm run validate:yaml"

@@ -18,6 +18,80 @@ type Route = {
 	metadata: RouteMetadata,
 }
 
+const createStaticShellPlugin = (basePath: string, title: string, description: string, lang: string) => {
+	const withBase = (assetPath: string) => {
+		const normalizedBase = basePath === "/" ? "" : basePath.replace(/\/$/, "");
+		return `${normalizedBase}/${assetPath.replace(/^\//, "")}`;
+	}
+
+	return {
+		name: "solidbase-static-shell",
+		apply: "build" as const,
+		closeBundle() {
+			const cwd = process.cwd();
+			const clientDir = path.join(cwd, "dist/client");
+			const publicDir = path.join(cwd, ".output/public");
+			const manifestPath = path.join(clientDir, ".vite/manifest.json");
+
+			if (!fs.existsSync(manifestPath)) {
+				return;
+			}
+
+			const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+			const entry = manifest["src/entry-client.tsx"];
+
+			if (!entry?.file) {
+				throw new Error("Unable to locate the client entry in dist/client/.vite/manifest.json.");
+			}
+
+			const cssLinks = (entry.css ?? [])
+				.map((cssFile: string) => `    <link rel="stylesheet" href="${withBase(cssFile)}" />`)
+				.join("\n");
+
+			const html = [
+				"<!doctype html>",
+				`<html lang="${lang}">`,
+				"  <head>",
+				'    <meta charset="utf-8" />',
+				'    <meta name="viewport" content="width=device-width, initial-scale=1" />',
+				`    <title>${title}</title>`,
+				`    <meta name="description" content="${description}" />`,
+				'    <link rel="icon" href="favicon.ico" />',
+				cssLinks,
+				"  </head>",
+				"  <body>",
+				'    <div id="app"></div>',
+				`    <script type="module" src="${withBase(entry.file)}"></script>`,
+				"  </body>",
+				"</html>",
+				"",
+			].filter(Boolean).join("\n");
+
+			const redirectBase = basePath.endsWith("/") ? basePath : `${basePath}/`;
+			const notFoundHtml = [
+				"<!doctype html>",
+				"<html>",
+				"  <body>",
+				"    <script>",
+				`      const base = ${JSON.stringify(redirectBase)};`,
+				"      const params = new URLSearchParams({ _g: `${window.location.pathname}${window.location.search}${window.location.hash}` });",
+				"      window.location.replace(`${base}?${params.toString()}`);",
+				"    </script>",
+				"  </body>",
+				"</html>",
+				"",
+			].join("\n");
+
+			fs.writeFileSync(path.join(clientDir, "index.html"), html);
+			fs.writeFileSync(path.join(clientDir, "404.html"), notFoundHtml);
+
+			fs.rmSync(publicDir, { recursive: true, force: true });
+			fs.mkdirSync(publicDir, { recursive: true });
+			fs.cpSync(clientDir, publicDir, { recursive: true });
+		},
+	};
+}
+
 const parseMetadata = (filePath: string): RouteMetadata => {
 	const contents = fs.readFileSync(filePath, "utf8");
 	const start = contents.indexOf("---");
@@ -98,24 +172,20 @@ if (fs.existsSync(configPath)) {
 const configuredSiteUrl = ymlconfigs.site_url || "https://example.com/";
 const configuredBasePath = new URL(configuredSiteUrl).pathname.replace(/\/$/, "") || "/";
 const solidBase = createSolidBase(defaultTheme);
+const resolvedTitle = ymlconfigs.title || "Github Action Solidbase Builder";
+const resolvedDescription = ymlconfigs.description || "Solidbase Theme for markdown documents to site converter for GitHub Pages.";
+const resolvedLang = ymlconfigs.lang || "en";
 
 export default defineConfig(({ command }) => ({
 	base: command === "serve" ? "/" : configuredBasePath,
-	build: {
-		outDir: ".output/public",
-		emptyOutDir: true,
-	},
 	plugins: [
-		...solidStart(solidBase.startConfig({
-			ssr: false,
-		})),
 		solidBase.plugin({
-			title: ymlconfigs.title || "Github Action Solidbase Builder",
-			description: ymlconfigs.description || "Solidbase Theme for markdown documents to site converter for GitHub Pages.",
+			title: resolvedTitle,
+			description: resolvedDescription,
 			siteUrl: configuredSiteUrl,
 			issueAutolink: ymlconfigs.issue_link || "https://github.com/nikescar/mdx-sitegen-solidbase/issues",
 			editPath: ymlconfigs.edit_path || "https://github.com/nikescar/mdx-sitegen-solidbase/edit/main/:path",
-			lang: ymlconfigs.lang || "en",
+			lang: resolvedLang,
 			locales: ymlconfigs.locales || {},
 			themeConfig: {
 				socialLinks: {
@@ -178,6 +248,10 @@ export default defineConfig(({ command }) => ({
 				},
 			},
 		}),
+		...solidStart(solidBase.startConfig({
+			ssr: false,
+		})),
 		OGPlugin() as any,
+		createStaticShellPlugin(configuredBasePath, resolvedTitle, resolvedDescription, resolvedLang),
 	],
 }));

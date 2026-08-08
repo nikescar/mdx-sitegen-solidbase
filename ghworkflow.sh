@@ -6,6 +6,8 @@
 
 src_path="."
 no_deploy=0
+npm_cli_path="$(node -p "require('fs').realpathSync(process.argv[1])" "$(command -v npm)")"
+npm_cmd=(npx -y node@24 "$npm_cli_path")
 
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -59,7 +61,11 @@ fi
 
 # echo "Cleaning routes folder in examples in theme routes..."
 rm -rf ./src/routes/*
-cp -rp "${src_path}/_config.yml" ./
+src_config_path="$(realpath "${src_path}/_config.yml")"
+target_config_path="$(realpath "./_config.yml" 2>/dev/null || true)"
+if [[ "$src_config_path" != "$target_config_path" ]]; then
+  cp -rp "${src_path}/_config.yml" ./
+fi
 
 # 1. Copying included files from ../ to ./src/routes...
 inclusion_list=$(${yq_bin_path} eval '.include[]' _config.yml)
@@ -71,7 +77,11 @@ mkdir -p ./src/routes
 cp -rp "${src_path}/index.md" ./src/routes/index.md 2>&1 1>/dev/null
 
 for item in $inclusion_list; do
-  cp -rfp "${src_path}/${item}" ./src/routes/${item}
+  if [[ -e "${src_path}/${item}" ]]; then
+    cp -rfp "${src_path}/${item}" ./src/routes/${item}
+  else
+    echo "Skipping missing inclusion path: ${src_path}/${item}"
+  fi
 done
 
 for item in $exclusion_list; do
@@ -84,7 +94,7 @@ ls -al ./src/routes/
 # 2. npm install
 echo "Installing npm dependencies..."
 if [[ ! -d "node_modules" ]] || [[ ! -f "package-lock.json" ]]; then
-  npm install
+  "${npm_cmd[@]}" install --legacy-peer-deps
 else
   echo "Dependencies already installed, skipping npm install..."
 fi
@@ -96,7 +106,7 @@ if [ -n "$site_url" ]; then
 fi
 
 # 3. Building the project...
-npx vite build
+"${npm_cmd[@]}" run build
 
 favicon_path=$(${yq_bin_path} eval '.site_favicon' _config.yml)
 if [ -n "$favicon_path" ]; then
@@ -106,7 +116,9 @@ fi
 
 # 5. Copy resources to public
 for item in $inclusion_list; do
-  cp -rp "${src_path}/${item}" ./.output/public/
+  if [[ -e "${src_path}/${item}" ]]; then
+    cp -rp "${src_path}/${item}" ./.output/public/
+  fi
 done
 
 for item in $exclusion_list; do
