@@ -32,8 +32,9 @@
     "deno": "^2.9.5",
     "firebase-tools": "^15.26.0",
     "gh-pages": "^6.3.0",
+    "resolve": "^1.22.12",
     "tsx": "^4.23.11",
-    "typescript": "^7.0.2",
+    "typescript": "^5.9.3",
     "wrangler": "^4.120.0",
     "yaml": "^2.9.0"
   }
