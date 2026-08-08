@@ -6,8 +6,6 @@
 
 src_path="."
 no_deploy=0
-npm_cli_path="$(node -p "require('fs').realpathSync(process.argv[1])" "$(command -v npm)")"
-npm_cmd=(npx -y node@24 "$npm_cli_path")
 
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -94,7 +92,7 @@ ls -al ./src/routes/
 # 2. npm install
 echo "Installing npm dependencies..."
 if [[ ! -d "node_modules" ]] || [[ ! -f "package-lock.json" ]]; then
-  "${npm_cmd[@]}" install --legacy-peer-deps
+  npm install --legacy-peer-deps
 else
   echo "Dependencies already installed, skipping npm install..."
 fi
@@ -106,7 +104,7 @@ if [ -n "$site_url" ]; then
 fi
 
 # 3. Building the project...
-"${npm_cmd[@]}" run build
+npm run build
 
 favicon_path=$(${yq_bin_path} eval '.site_favicon' _config.yml)
 if [ -n "$favicon_path" ]; then

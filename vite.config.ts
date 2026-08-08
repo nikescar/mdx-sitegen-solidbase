@@ -19,6 +19,13 @@ type Route = {
 }
 
 const createStaticShellPlugin = (basePath: string, title: string, description: string, lang: string) => {
+	const escapeHtml = (value: string) => value
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#39;");
+
 	const withBase = (assetPath: string) => {
 		const normalizedBase = basePath === "/" ? "" : basePath.replace(/\/$/, "");
 		return `${normalizedBase}/${assetPath.replace(/^\//, "")}`;
@@ -50,12 +57,12 @@ const createStaticShellPlugin = (basePath: string, title: string, description: s
 
 			const html = [
 				"<!doctype html>",
-				`<html lang="${lang}">`,
+				`<html lang="${escapeHtml(lang)}">`,
 				"  <head>",
 				'    <meta charset="utf-8" />',
 				'    <meta name="viewport" content="width=device-width, initial-scale=1" />',
-				`    <title>${title}</title>`,
-				`    <meta name="description" content="${description}" />`,
+				`    <title>${escapeHtml(title)}</title>`,
+				`    <meta name="description" content="${escapeHtml(description)}" />`,
 				'    <link rel="icon" href="favicon.ico" />',
 				cssLinks,
 				"  </head>",
@@ -95,7 +102,7 @@ const createStaticShellPlugin = (basePath: string, title: string, description: s
 const parseMetadata = (filePath: string): RouteMetadata => {
 	const contents = fs.readFileSync(filePath, "utf8");
 	const start = contents.indexOf("---");
-	const end = contents.lastIndexOf("---");
+	const end = start !== -1 ? contents.indexOf("---", start + 3) : -1;
 	const fallbackTitle = path.basename(filePath, path.extname(filePath));
 
 	if (start === -1 || end === -1 || end <= start) {
@@ -172,7 +179,7 @@ if (fs.existsSync(configPath)) {
 const configuredSiteUrl = ymlconfigs.site_url || "https://example.com/";
 const configuredBasePath = new URL(configuredSiteUrl).pathname.replace(/\/$/, "") || "/";
 const solidBase = createSolidBase(defaultTheme);
-const resolvedTitle = ymlconfigs.title || "Github Action Solidbase Builder";
+const resolvedTitle = ymlconfigs.title || "GitHub Action Solidbase Builder";
 const resolvedDescription = ymlconfigs.description || "Solidbase Theme for markdown documents to site converter for GitHub Pages.";
 const resolvedLang = ymlconfigs.lang || "en";
 

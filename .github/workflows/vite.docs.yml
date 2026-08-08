@@ -24,9 +24,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: clone solidbase theme github
         run: |
-          export PATH="/opt/hostedtoolcache/node/22.x.x/x64/bin/:$PATH"
           export theme_upstream=$(grep -m1 'theme_upstream:' _config.yml | awk '{print $2}' | sed "s/'//g")/archive/refs/heads/main.tar.gz
           wget -q "$theme_upstream" -O main.tar.gz
           if [ $? -ne 0 ]; then

@@ -12,10 +12,14 @@ author: 'GitHub'
 runs:
   using: 'composite'
   steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 24
+
     - name: Download and build with theme
       shell: bash
       run: |
-        export PATH="/opt/hostedtoolcache/node/22.x.x/x64/bin/:$PATH"
         export theme_upstream=$(grep -m1 'theme_upstream:' ${{ inputs.config_path }} | awk '{print $2}' | sed "s/'//g")/archive/refs/heads/main.tar.gz
         wget -q "$theme_upstream" -O main.tar.gz
         if [ $? -ne 0 ]; then
@@ -32,4 +36,3 @@ inputs:
     description: 'Path to _config.yml file'
     required: false
     default: '_config.yml'
-
